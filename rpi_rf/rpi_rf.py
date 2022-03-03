@@ -59,6 +59,11 @@ class RFDevice:
         GPIO.setmode(GPIO.BCM)
         _LOGGER.debug("Using GPIO " + str(gpio))
 
+        self.version = "RPI RF V0.1"
+
+    def getversion(self):
+        return self.version
+
     def cleanup(self):
         """Disable TX and RX and clean up GPIO."""
         if self.tx_enabled:
