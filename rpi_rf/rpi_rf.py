@@ -248,18 +248,22 @@ class RFDevice:
             self._rx_last_timestamp = timestamp
         else:
             if self.recrawstart == True and self.recrawcpt < REC_RAW_SIZE:
-                self.recrawtab[self.recrawcpt]
+                self.recrawtab[self.recrawcpt] = duration
                 self.recrawcpt += 1
+                print ("REC : " + duration)
             else:
                 if self.recrawcpt == REC_RAW_SIZE:
+                    print ("Stop and save Rec Raw")
                     with open('some.csv', 'w', newline='') as f:
                         writer = csv.writer(f)
                         writer.writerow(self.recrawtab)
                         exit()
                 
                 if duration > 5000:
+                    print ("Start Rec Raw")
+                    print ("REC : " + duration)
                     self.recrawstart = True
-                    self.recrawtab[self.recrawcpt]
+                    self.recrawtab[self.recrawcpt] = duration
                     self.recrawcpt += 1
 
 
@@ -306,6 +310,7 @@ class RFDevice:
             spamreader = csv.reader(csvfile)
             for row in spamreader:
                 for x in row:
+                    print("send : " + x)
                     GPIO.output(self.gpio, sate)
                     self._sleep(x / 1000000)
                     if sate == GPIO.HIGH:
