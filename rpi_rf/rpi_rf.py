@@ -4,11 +4,13 @@ Sending and receiving 433/315Mhz signals with low-cost GPIO RF Modules on a Rasp
 
 import logging
 import time
+import csv
 from collections import namedtuple
 
 from RPi import GPIO
 
 MAX_CHANGES = 67
+REC_RAW_SIZE = 500
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -59,10 +61,25 @@ class RFDevice:
         GPIO.setmode(GPIO.BCM)
         _LOGGER.debug("Using GPIO " + str(gpio))
 
+        #add by JJ
         self.version = "RPI RF V0.1"
+        self.recraw = False
+        self.recfile = "RecRaw.csv"
+        self.recrawstart = False
+        self.recrawtab = [0] * (REC_RAW_SIZE + 1)
+        self.recrawcpt = 0
 
     def getversion(self):
         return self.version
+
+    def enable_recraw(self):
+        """Enable Record Raw file"""
+        self.recraw = True
+        return True
+
+    def set_recfile(self,rawfile):
+        self.recfile = rawfile
+        return True
 
     def cleanup(self):
         """Disable TX and RX and clean up GPIO."""
@@ -210,24 +227,41 @@ class RFDevice:
         timestamp = int(time.perf_counter() * 1000000)
         duration = timestamp - self._rx_last_timestamp
 
-        if duration > 5000:
-            if abs(duration - self._rx_timings[0]) < 200:
-                self._rx_repeat_count += 1
-                self._rx_change_count -= 1
-                if self._rx_repeat_count == 2:
-                    for pnum in range(1, len(PROTOCOLS)):
-                        if self._rx_waveform(pnum, self._rx_change_count, timestamp):
-                            _LOGGER.debug("RX code " + str(self.rx_code))
-                            break
-                    self._rx_repeat_count = 0
-            self._rx_change_count = 0
+        if self.recraw == False:
+            if duration > 5000:
+                if abs(duration - self._rx_timings[0]) < 200:
+                    self._rx_repeat_count += 1
+                    self._rx_change_count -= 1
+                    if self._rx_repeat_count == 2:
+                        for pnum in range(1, len(PROTOCOLS)):
+                            if self._rx_waveform(pnum, self._rx_change_count, timestamp):
+                                _LOGGER.debug("RX code " + str(self.rx_code))
+                                break
+                        self._rx_repeat_count = 0
+                self._rx_change_count = 0
 
-        if self._rx_change_count >= MAX_CHANGES:
-            self._rx_change_count = 0
-            self._rx_repeat_count = 0
-        self._rx_timings[self._rx_change_count] = duration
-        self._rx_change_count += 1
-        self._rx_last_timestamp = timestamp
+            if self._rx_change_count >= MAX_CHANGES:
+                self._rx_change_count = 0
+                self._rx_repeat_count = 0
+            self._rx_timings[self._rx_change_count] = duration
+            self._rx_change_count += 1
+            self._rx_last_timestamp = timestamp
+        else:
+            if self.recrawstart == True and self.recrawcpt < REC_RAW_SIZE:
+                self.recrawtab[self.recrawcpt]
+                self.recrawcpt += 1
+            else:
+                if self.recrawcpt == REC_RAW_SIZE:
+                    with open('some.csv', 'w', newline='') as f:
+                        writer = csv.writer(f)
+                        writer.writerow(self.recrawtab)
+                        exit()
+                
+                if duration > 5000:
+                    self.recrawstart = True
+                    self.recrawtab[self.recrawcpt]
+                    self.recrawcpt += 1
+
 
     def _rx_waveform(self, pnum, change_count, timestamp):
         """Detect waveform and format code."""
@@ -261,3 +295,21 @@ class RFDevice:
         end = time.time() + delay - _delay
         while time.time() < end:
             time.sleep(_delay)
+
+    def tx_SilverCrest(self, filename):
+        if not self.tx_enabled:
+            _LOGGER.error("TX is not enabled, not sending data")
+            return False
+        sate = GPIO.HIGH
+
+        with open(filename,newline='')as csvfile:
+            spamreader = csv.reader(csvfile)
+            for row in spamreader:
+                for x in row:
+                    GPIO.output(self.gpio, sate)
+                    self._sleep(x / 1000000)
+                    if sate == GPIO.HIGH:
+                        sate = GPIO.LOW
+                    else:
+                        sate = GPIO.HIGH
+        return True
